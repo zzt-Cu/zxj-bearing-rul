@@ -1,0 +1,15 @@
+{"stage_id": "baseline", "seed": 42, "epoch": 1, "step": 55, "loss": 0.6739905170711971, "validation": {"mae": 493.31637856691185, "rmse": 580.1530914893449}}
+{"stage_id": "baseline", "seed": 42, "epoch": 2, "step": 110, "loss": 0.3631923778818799, "validation": {"mae": 479.2950211877225, "rmse": 567.1475036182951}}
+{"stage_id": "baseline", "seed": 42, "epoch": 3, "step": 165, "loss": 0.2994059615174485, "validation": {"mae": 495.0913282110341, "rmse": 590.9269478942861}}
+{"stage_id": "baseline", "seed": 42, "epoch": 4, "step": 220, "loss": 0.2437445123341792, "validation": {"mae": 503.8595017582061, "rmse": 597.0704915610044}}
+{"stage_id": "baseline", "seed": 42, "epoch": 5, "step": 275, "loss": 0.195123112535701, "validation": {"mae": 496.0760876948133, "rmse": 591.1483014683618}}
+{"stage_id": "baseline", "seed": 42, "epoch": 6, "step": 330, "loss": 0.16091999041380012, "validation": {"mae": 509.3402541878975, "rmse": 607.0829344017061}}
+{"stage_id": "baseline", "seed": 42, "epoch": 7, "step": 385, "loss": 0.14238879494221832, "validation": {"mae": 503.8197417299781, "rmse": 600.4901247906611}}
+{"stage_id": "baseline", "seed": 42, "epoch": 8, "step": 440, "loss": 0.1314586762886941, "validation": {"mae": 528.7132802049053, "rmse": 631.6303008623622}}
+{"stage_id": "baseline", "seed": 42, "epoch": 9, "step": 495, "loss": 0.12323521556178119, "validation": {"mae": 529.980008113351, "rmse": 635.1683944157318}}
+{"stage_id": "baseline", "seed": 42, "epoch": 10, "step": 550, "loss": 0.11440390049322612, "validation": {"mae": 536.6525890960489, "rmse": 645.4248746934522}}
+{"stage_id": "baseline", "seed": 42, "epoch": 11, "step": 605, "loss": 0.10987491381725141, "validation": {"mae": 537.6292753500401, "rmse": 645.0184891534415}}
+{"stage_id": "baseline", "seed": 42, "epoch": 12, "step": 660, "loss": 0.10537170115253248, "validation": {"mae": 521.7554205053748, "rmse": 629.8370924436805}}
+{"stage_id": "baseline", "seed": 42, "epoch": 13, "step": 715, "loss": 0.10218169658649934, "validation": {"mae": 531.367237762328, "rmse": 633.857970711928}}
+{"stage_id": "baseline", "seed": 42, "epoch": 14, "step": 770, "loss": 0.09754420299454533, "validation": {"mae": 519.1387732802589, "rmse": 632.118574109451}}
+{"stage_id": "baseline", "seed": 42, "epoch": 15, "step": 825, "loss": 0.0955369117259191, "validation": {"mae": 563.1058414514886, "rmse": 681.1598326043113}}

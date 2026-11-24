@@ -1,0 +1,48 @@
+# 智训引擎 B 题 Harness 镜像
+# 平台要求：Linux/amd64、docker save 导出的未压缩 tar、不含源码压缩包
+FROM --platform=linux/amd64 python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    BASELINE_CPU_THREADS=2 \
+    ZXJ_INPUT_MODE=abs8log \
+    ZXJ_TARGET_POWER=0.45 \
+    ENSEMBLE_BATCH=96,112,128,144,192,256 \
+    TAIL_MINUTES=100 \
+    TAIL_TRADE_GAIN=0.20 \
+    TAIL_TRADE_RMSE=0.06 \
+    CKPT=/app/checkpoint.npz \
+    RUN_DIR=/app/runs \
+    MAX_ROUNDS=3 \
+    EPOCH_BUDGET=330 \
+    STAGE_PREFIX=zxj \
+    MIN_TAIL_N=30 \
+    MAX_GROUP_DEGRADE=0.25
+
+WORKDIR /app
+
+# 依赖在构建期装好，评测期完全离线。
+# 镜像源做成 ARG：本机构建走清华源（默认），需要时可用 --build-arg 覆盖回官方源。
+ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+COPY baselines/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --disable-pip-version-check \
+        --index-url "$PIP_INDEX" --retries 8 --timeout 120 \
+        -r /tmp/requirements.txt \
+    && python -c "import numpy, sys; print('numpy', numpy.__version__, 'python', sys.version.split()[0]); assert numpy.__version__ == '1.26.4'"
+
+# 训练与预测代码（baselines 可修改，已按其约定改造输入整形）
+COPY baselines/ /app/baselines/
+COPY harness/ /app/harness/
+COPY selfcheck.py /app/selfcheck.py
+COPY pytrio_probe.py /app/pytrio_probe.py
+
+# 起点检查点与公开集（隐藏测试集不随镜像分发）
+COPY checkpoint.npz /app/checkpoint.npz
+COPY public/ /app/public/
+
+# 构建期做一次导入自检，失败即中止打包
+RUN python -c "import baselines.train, baselines.predict, harness.loop; print('imports ok')"
+
+# 默认无人干预跑完整循环；平台可用 --data/--ckpt/--run-dir 覆盖
+ENTRYPOINT ["python"]
+CMD ["-m", "harness.loop"]

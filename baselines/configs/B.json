@@ -1,0 +1,11 @@
+{
+  "profile": "B",
+  "task": "regression",
+  "target_unit": "minutes",
+  "classes": [],
+  "hidden": 24,
+  "seed": 42,
+  "learning_rate": 0.003,
+  "batch_size": 128,
+  "epochs": 15
+}

@@ -1,0 +1,12 @@
+{
+  "checkpoint_sha256": "sha256:c7d819fcee9d25459c583b5ffdb35593d4a47b524ed152d0226bf81a283314b4",
+  "code_sha256": "sha256:25f3fcef23c095a079eb209edcd118ff1d3e3727bb7713fdfd178334579b5e83",
+  "dataset_key": "B",
+  "id": "cpu-b-rul-20261110-v1",
+  "label_status": "approved",
+  "parameter_count": 865,
+  "target_definition": "(last_snapshot - current_snapshot) * 1 minute; last observed snapshot has RUL 0",
+  "target_origin": "remaining_time_from_lifecycle",
+  "target_unit": "minutes",
+  "task": "regression"
+}
