@@ -1,0 +1,21 @@
+{
+  "rounds_used": 3,
+  "epochs_used": 255,
+  "best_rmse": 302.75190317514176,
+  "best_tail_rmse": 274.51877515600404,
+  "best_checkpoint": "/app/runs/round-01/checkpoint.npz",
+  "accepted_rounds": [
+    1
+  ],
+  "best_groups": {
+    "xjtu_Bearing1_4": 297.28436079025556,
+    "xjtu_Bearing2_4": 357.6545134308472,
+    "xjtu_Bearing3_4": 301.5256736829007
+  },
+  "track_epochs_used": 1530,
+  "unverified_rounds": [],
+  "published_checkpoint": {
+    "/app/checkpoint.npz": "c8bd660824969d609d6b4549aad5ec0220bebfc8775f10046a608294046edece",
+    "/app/best_checkpoint.npz": "c8bd660824969d609d6b4549aad5ec0220bebfc8775f10046a608294046edece"
+  }
+}

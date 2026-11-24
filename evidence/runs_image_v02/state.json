@@ -1,0 +1,10 @@
+{
+  "rounds_used": 1,
+  "epochs_used": 105,
+  "best_rmse": 302.75190317514176,
+  "best_tail_rmse": 274.51877515600404,
+  "best_checkpoint": "/app/runs/round-01/checkpoint.npz",
+  "accepted_rounds": [
+    1
+  ]
+}

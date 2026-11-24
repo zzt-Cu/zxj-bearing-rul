@@ -1,0 +1,29 @@
+{
+  "rounds": 3,
+  "accepted_rounds": [
+    1
+  ],
+  "unverified_rounds": [],
+  "epochs_used": 255,
+  "track_epochs_used": 1530,
+  "best_rmse": 302.75190317514176,
+  "best_tail_rmse": 274.51877515600404,
+  "best_checkpoint": "/app/runs/round-01/checkpoint.npz",
+  "submitted_checkpoint": "/app/checkpoint.npz",
+  "submitted_checkpoint_sha256": "c8bd660824969d609d6b4549aad5ec0220bebfc8775f10046a608294046edece",
+  "start_checkpoint": "/app/checkpoint.start.npz",
+  "start_checkpoint_sha256": "c7d819fcee9d25459c583b5ffdb35593d4a47b524ed152d0226bf81a283314b4",
+  "input_mode": "abs8log",
+  "target_power": 0.45,
+  "ensemble": [
+    96,
+    112,
+    128,
+    144,
+    192,
+    256
+  ],
+  "publish_errors": [],
+  "decisions": "/app/runs/decisions.jsonl",
+  "elapsed_s": 97.49
+}
