@@ -8,19 +8,8 @@ FROM --platform=linux/amd64 python:3.12-alpine
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     BASELINE_CPU_THREADS=2 \
-    ZXJ_INPUT_MODE=abs8log \
-    ZXJ_TARGET_POWER=0.45 \
-    ENSEMBLE_BATCH=96,112,128,144,192,256 \
-    TAIL_MINUTES=100 \
-    TAIL_TRADE_GAIN=0.20 \
-    TAIL_TRADE_RMSE=0.06 \
-    CKPT=/app/checkpoint.npz \
     RUN_DIR=/app/runs \
-    MAX_ROUNDS=3 \
-    EPOCH_BUDGET=330 \
-    STAGE_PREFIX=zxj \
-    MIN_TAIL_N=30 \
-    MAX_GROUP_DEGRADE=0.25
+    STAGE_PREFIX=zxj
 
 WORKDIR /app
 
@@ -40,8 +29,14 @@ COPY pytrio_probe.py /app/pytrio_probe.py
 
 COPY checkpoint.npz /app/checkpoint.npz
 COPY public/ /app/public/
+COPY baselines_ckpt/ /app/baselines_ckpt/
 
 RUN python -c "import baselines.train, baselines.predict, harness.loop; print('imports ok')"
 
+# 平台可能以非 root 用户启动容器。0.6 及以前 /app 是 root:root 755，非 root 建不了
+# /app/runs，直接 PermissionError 退出、traceback 只进 stderr，平台侧表现为
+# 「运行失败 + 无日志」。这里把 /app 放开到任意用户可写；运行期仍有 /tmp 回退兜底。
+RUN mkdir -p /app/runs && chmod -R a+rwX /app
+
 ENTRYPOINT ["python"]
-CMD ["-m", "harness.loop"]
+CMD ["-m", "harness.preflight"]

@@ -7,8 +7,10 @@
 from pathlib import Path
 import argparse
 import json
+import os
 import sys
 import time
+import traceback
 
 try:
     from harness import evaluator, executor, gatekeeper, observer, planner, recorder
@@ -20,12 +22,32 @@ except ImportError:  # 直接以脚本方式运行时的兜底
     from harness import publish as publish_module
     from harness import spec as spec_module
 
-from baselines.data import read_dataset
 from baselines.model import Model
+from harness import dataset_cache
 
 
 def _emit(kind, payload):
     print("[harness] %s %s" % (kind, json.dumps(payload, ensure_ascii=False, allow_nan=False)), flush=True)
+
+
+def _pick_writable_dir(preferred, fallbacks):
+    """返回第一个能真正写入的目录；全都不行时返回 (None, 失败原因列表)。
+
+    只 mkdir 不够：目录可能存在但不可写（非 root 遇到 root 拥有的 755 目录），
+    所以真写一个探针文件再删掉。
+    """
+    errors = []
+    for cand in (preferred,) + tuple(fallbacks):
+        try:
+            p = Path(cand)
+            p.mkdir(parents=True, exist_ok=True)
+            probe = p / ".write_probe"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            return p, errors
+        except OSError as error:  # noqa: PERF203 - 逐个候选试，异常就是分支条件
+            errors.append("%s: %s: %s" % (cand, type(error).__name__, error))
+    return None, errors
 
 
 def main(argv=None):
@@ -38,6 +60,14 @@ def main(argv=None):
     parser.add_argument("--min-gain", type=float)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+
+    # 第一行就吐心跳：平台若按日志判存活，这一行能证明进程起来了、参数是什么；
+    # 若后面卡住，日志停在哪个事件也能一眼定位。
+    _emit("boot", {"argv": sys.argv[1:], "pid": os.getpid(), "cwd": os.getcwd(),
+                   "cpu_threads": os.environ.get("BASELINE_CPU_THREADS", ""),
+                   "use_llm": os.environ.get("ZXJ_USE_LLM", "0"),
+                   "max_rounds": os.environ.get("MAX_ROUNDS", ""),
+                   "wall_limit_s": os.environ.get("WALL_LIMIT_S", "")})
 
     spec = spec_module.Spec.build(
         data_dir=Path(args.data) if args.data else None,
@@ -54,7 +84,28 @@ def main(argv=None):
         _emit("fatal", {"error": "checkpoint not found", "ckpt": str(spec.ckpt)})
         return 2
 
-    Path(spec.run_dir).mkdir(parents=True, exist_ok=True)
+    # 运行目录必须可写。平台若以非 root 或只读根文件系统启动容器，/app/runs 会
+    # PermissionError / EROFS。0.6 及以前直接抛异常退出，traceback 只进 stderr，
+    # 平台只收 stdout 时就成了「运行失败且无日志」。0.7 起按候选回退，并把结果打进日志。
+    run_dir, run_dir_errors = _pick_writable_dir(spec.run_dir,
+                                                 ("/tmp/zxj_runs", "/dev/shm/zxj_runs",
+                                                  str(Path.home() / "zxj_runs")))
+    if run_dir is None:
+        _emit("fatal", {"error": "no writable run dir", "preferred": str(spec.run_dir),
+                        "tried": run_dir_errors})
+        return 2
+    if Path(run_dir) != Path(spec.run_dir):
+        _emit("warn", {"run_dir_fallback": str(run_dir), "preferred": str(spec.run_dir),
+                       "tried": run_dir_errors})
+        spec.run_dir = Path(run_dir)
+    _emit("writable", {
+        "run_dir": str(spec.run_dir),
+        "ckpt": str(spec.ckpt),
+        "ckpt_writable": os.access(str(spec.ckpt), os.W_OK),
+        "ckpt_dir_writable": os.access(str(Path(spec.ckpt).parent), os.W_OK),
+        "data_dir_readable": os.access(str(spec.data_dir), os.R_OK),
+        "uid": os.getuid() if hasattr(os, "getuid") else None,
+    })
 
     # 起点备份必须在任何训练之前：后面 publish 会覆盖 spec.ckpt，
     # 没有这份备份，第 2 轮就会把权重平均点当起点（P3 复发）。
@@ -70,10 +121,13 @@ def main(argv=None):
     state.setdefault("best_groups", {})
     state.setdefault("track_epochs_used", 0)
     state.setdefault("unverified_rounds", [])
+    state.setdefault("best_score", state.get("best_rmse"))
+    state.setdefault("best_classes", {})
+    state.setdefault("best_nasa_score", None)
     if not Path(state["best_checkpoint"]).is_file():
         state["best_checkpoint"] = str(spec.ckpt)
 
-    train_paths = read_dataset(spec.train_jsonl, "regression", [])["paths"]
+    train_paths = dataset_cache.read(spec.train_jsonl, spec.task, spec.classes)["paths"]
     facts = observer.observe(spec, state)
     _emit("spec", spec.as_dict())
     _emit("observe", facts)
@@ -81,22 +135,45 @@ def main(argv=None):
                          "process_env": spec.input_mode})
 
     if args.dry_run:
-        policy = planner._load_policy()
+        policy = planner._load_policy(spec.profile)
         _emit("propose", planner.propose(facts, policy) or {"proposal": None, "reason": "预算不足"})
         return 0
 
     started = time.monotonic()
-    policy = planner._load_policy()
+    policy = planner._load_policy(spec.profile)
+    _emit("budget", {"wall_limit_s": spec.wall_limit_s, "max_rounds": spec.max_rounds,
+                     "epoch_budget": spec.epoch_budget,
+                     "note": "墙钟预算用于在平台强杀容器前自行收尾：已发布的最好权重不受影响"})
+    last_round_cost = 0.0
+    stop_reason = {"reason": "未记录（异常退出）"}
     while True:
+        elapsed = time.monotonic() - started
         if state["rounds_used"] >= spec.max_rounds:
-            _emit("stop", {"reason": "达到轮次上限", "max_rounds": spec.max_rounds})
+            stop_reason = {"reason": "达到轮次上限", "max_rounds": spec.max_rounds,
+                           "elapsed_s": round(elapsed, 1)}
+            _emit("stop", stop_reason)
             break
         if state["epochs_used"] >= spec.epoch_budget:
-            _emit("stop", {"reason": "epoch 预算用尽", "epoch_budget": spec.epoch_budget})
+            stop_reason = {"reason": "epoch 预算用尽", "epoch_budget": spec.epoch_budget,
+                           "elapsed_s": round(elapsed, 1)}
+            _emit("stop", stop_reason)
             break
-        if time.monotonic() - started > spec.wall_limit_s:
-            _emit("stop", {"reason": "墙钟上限", "wall_limit_s": spec.wall_limit_s})
+        if elapsed > spec.wall_limit_s:
+            stop_reason = {"reason": "墙钟上限", "wall_limit_s": spec.wall_limit_s,
+                           "elapsed_s": round(elapsed, 1)}
+            _emit("stop", stop_reason)
             break
+        # 0.8：平台会在固定窗口后强杀容器，杀掉时拿不到 summary、也没法回滚。
+        # 所以每轮开始前用「上一轮实测耗时 × 1.2」估下一轮，装不进预算就自己收尾。
+        # 收尾不影响成绩：第 1 轮 accept 后已经 publish 过，最好的权重早写回平台路径。
+        if last_round_cost:
+            estimate = last_round_cost * 1.2
+            if elapsed + estimate > spec.wall_limit_s:
+                stop_reason = {"reason": "剩余预算装不下下一轮", "wall_limit_s": spec.wall_limit_s,
+                               "elapsed_s": round(elapsed, 1),
+                               "next_round_est_s": round(estimate, 1)}
+                _emit("stop", stop_reason)
+                break
 
         proposal = planner.propose(facts, policy)
         if not proposal:
@@ -105,6 +182,7 @@ def main(argv=None):
 
         round_index = state["rounds_used"] + 1
         _emit("propose", {"round": round_index, **proposal})
+        round_t0 = time.monotonic()
 
         try:
             execution = executor.run_round(spec, proposal, state["best_checkpoint"], round_index)
@@ -118,12 +196,13 @@ def main(argv=None):
             state["rounds_used"] += 1
             state["epochs_used"] += int(proposal["epochs"])
             state["track_epochs_used"] = (state.get("track_epochs_used", 0)
-                                          + int(proposal["epochs"]) * len(executor._ensemble() or [1]))
+                                          + int(proposal["epochs"]) * len(spec.ensemble or [1]))
             state["best_rmse"] = state.get("best_rmse")
             state["accepted_rounds"] = state.get("accepted_rounds", [])
             recorder.save_state(spec, state)
             facts = observer.observe(spec, state)
             _emit("error", {"round": round_index, "detail": record["execution"]["error"]})
+            last_round_cost = time.monotonic() - round_t0
             continue
 
         metrics = evaluator.evaluate(spec, execution["checkpoint"], train_paths)
@@ -144,10 +223,19 @@ def main(argv=None):
 
         if decision["action"] in ("accept", "advance_unverified"):
             if metrics is not None:
-                state["best_rmse"] = metrics["rmse"]
-                state["best_tail_rmse"] = metrics.get("tail_rmse")
-                state["best_groups"] = {name: info["rmse"]
-                                        for name, info in (metrics.get("groups") or {}).items()}
+                if spec.profile == "B":
+                    state["best_rmse"] = metrics["rmse"]
+                    state["best_tail_rmse"] = metrics.get("tail_rmse")
+                    state["best_groups"] = {name: info["rmse"]
+                                            for name, info in (metrics.get("groups") or {}).items()}
+                    state["best_score"] = metrics["rmse"]
+                elif spec.profile == "A":
+                    state["best_score"] = metrics["macro_f1"]
+                    state["best_classes"] = {name: info["f1"]
+                                             for name, info in (metrics.get("per_class") or {}).items()}
+                else:
+                    state["best_score"] = metrics["rmse"]
+                    state["best_nasa_score"] = metrics.get("nasa_score")
                 state["accepted_rounds"] = state.get("accepted_rounds", []) + [round_index]
             else:
                 state["unverified_rounds"] = state.get("unverified_rounds", []) + [round_index]
@@ -168,35 +256,63 @@ def main(argv=None):
         record = recorder.new_record(round_index, observation, proposal, execution, metrics, decision)
         recorder.append_decision(spec, record)
         _emit("result", {"round": round_index,
-                         "rmse": None if metrics is None else round(metrics["rmse"], 2),
+                         "metric": spec.primary_metric,
+                         "primary": None if metrics is None else round(metrics["primary"], 4),
+                         "rmse": None if metrics is None or metrics.get("rmse") is None
+                                 else round(metrics["rmse"], 2),
                          "tail_rmse": None if metrics is None else metrics.get("tail_rmse"),
-                         "worst_group": None if metrics is None else metrics["worst_group"]["name"],
-                         "decision": decision["action"]})
+                         "worst_group": None if metrics is None
+                                        else (metrics.get("worst_group") or {}).get("name"),
+                         "decision": decision["action"],
+                         "elapsed_s": round(time.monotonic() - started, 1)})
         recorder.save_state(spec, state)
-        policy = planner.remember(proposal)
+        policy = planner.remember(proposal, spec.profile)
         facts = observer.observe(spec, state)
+        last_round_cost = time.monotonic() - round_t0
+        # 每轮落一份 progress：万一平台在收尾前强杀，也能看出跑到第几轮、当时最好是多少
+        try:
+            (Path(spec.run_dir) / "progress.json").write_text(json.dumps({
+                "status": "running", "rounds_done": state["rounds_used"],
+                "best_rmse": state.get("best_rmse"),
+                "published_sha256": (state.get("published_checkpoint") or {}).get(str(spec.ckpt)),
+                "elapsed_s": round(time.monotonic() - started, 1)}, ensure_ascii=False) + "\n",
+                encoding="utf-8")
+        except OSError:
+            pass
 
     published = state.get("published_checkpoint") or {}
-    submitted_sha = published.get(str(spec.ckpt))
-    if submitted_sha is None and Path(spec.ckpt).is_file():
-        submitted_sha = publish_module.sha256_file(spec.ckpt)
+    # 提交路径取 publish_targets 的第一个：B 就是 ckpt 本身，A/C 是 /app/checkpoint.npz。
+    # 0.9 首版这里写的是 spec.ckpt，A/C 会报出「官方基线」的指纹，看起来像没训练过。
+    submitted_path = Path(spec.publish_targets[0])
+    submitted_sha = published.get(str(submitted_path))
+    if submitted_sha is None and submitted_path.is_file():
+        submitted_sha = publish_module.sha256_file(submitted_path)
     summary = {
+        "profile": spec.profile,
+        "profile_source": spec.profile_source,
+        "task": spec.task,
+        "primary_metric": spec.primary_metric,
         "rounds": state["rounds_used"],
+        "planned_rounds": spec.max_rounds,
+        "stop": stop_reason,
         "accepted_rounds": state.get("accepted_rounds", []),
         "unverified_rounds": state.get("unverified_rounds", []),
         "epochs_used": state["epochs_used"],
         "track_epochs_used": state.get("track_epochs_used", 0),
+        # B 用 best_rmse（原名不动）；A/C 用 best_score 承载主指标
         "best_rmse": state.get("best_rmse"),
+        "best_score": state.get("best_score"),
         "best_tail_rmse": state.get("best_tail_rmse"),
+        "best_nasa_score": state.get("best_nasa_score"),
         "best_checkpoint": state["best_checkpoint"],
         # 平台到底读哪个路径没有公开契约，所以这三个字段一起写清楚
-        "submitted_checkpoint": str(spec.ckpt),
+        "submitted_checkpoint": str(submitted_path),
         "submitted_checkpoint_sha256": submitted_sha,
         "start_checkpoint": str(spec.start_ckpt),
         "start_checkpoint_sha256": start_backup.get("sha256"),
         "input_mode": spec.input_mode,
         "target_power": spec.target_power,
-        "ensemble": executor._ensemble() or [],
+        "ensemble": list(spec.ensemble or []),
         "publish_errors": state.get("publish_errors", []),
         "decisions": str(recorder.decisions_path(spec)),
         "elapsed_s": round(time.monotonic() - started, 2),
@@ -208,4 +324,15 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # 平台多数只回收 stdout。0.6 及以前，未捕获异常只进 stderr，平台侧就是
+    # 「运行失败且无日志」，连查都没法查。这里把整段 traceback 也打到 stdout。
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except BaseException:  # noqa: BLE001 - 最后一道兜底，任何异常都要留下证据
+        tb = traceback.format_exc()
+        _emit("fatal", {"error": "uncaught", "type": tb.strip().splitlines()[-1][:200],
+                        "traceback": tb.strip().splitlines()[-14:]})
+        print(tb, file=sys.stdout, flush=True)
+        sys.exit(1)

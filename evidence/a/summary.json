@@ -1,0 +1,34 @@
+{
+  "profile": "A",
+  "profile_source": "probe",
+  "task": "classification",
+  "primary_metric": "macro_f1",
+  "rounds": 6,
+  "planned_rounds": 6,
+  "stop": {
+    "reason": "达到轮次上限",
+    "max_rounds": 6,
+    "elapsed_s": 18.4
+  },
+  "accepted_rounds": [
+    1
+  ],
+  "unverified_rounds": [],
+  "epochs_used": 80,
+  "track_epochs_used": 80,
+  "best_rmse": null,
+  "best_score": 0.7288121737130235,
+  "best_tail_rmse": null,
+  "best_nasa_score": null,
+  "best_checkpoint": "/app/runs/round-01/checkpoint.npz",
+  "submitted_checkpoint": "/app/checkpoint.npz",
+  "submitted_checkpoint_sha256": "80bebc37fb355d0a2a0837153200ce100823a597645941b552e9b0e5392263aa",
+  "start_checkpoint": "/app/baselines_ckpt/A.start.npz",
+  "start_checkpoint_sha256": "fd1e08b2aad08b2e9754f9b2dfdc029481c0da7ecdedca0abb0ec6fcc818c757",
+  "input_mode": "abs8",
+  "target_power": 1.0,
+  "ensemble": [],
+  "publish_errors": [],
+  "decisions": "/app/runs/decisions.jsonl",
+  "elapsed_s": 18.41
+}

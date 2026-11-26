@@ -1,5 +1,14 @@
 # Harness 使用说明（B 题）
 
+> **版本状态（2026-11-25）**：本次交付的镜像为 **`zxj-harness:0.8`**（tar 45,509,632 字节，
+> sha256 `e816c4bd…`，自检 **10/10**，容器内 2 核非 root **两轮** 302.75 / 305.99，**314.6 秒**）。
+> 0.8 把默认轮数从三轮改为两轮，并加了 `WALL_LIMIT_S=390` 的墙钟预算与自适应收尾——
+> 平台窗口到点会强杀容器，自己收尾才能保证 summary 与权重先落盘；最终提交的一直是第 1 轮的
+> 302.75，第 3 轮的 342.01 只是陪跑，删掉不影响成绩（见 `P7_wall_budget.md`）。
+> 本文成文于 0.3–0.4 阶段，第四、十节里“0.4 / 8 项自检 / 89 秒”等表述是当时的历史记录，
+> 数字与结论仍然成立，但**版本号与自检项数已过期**；0.5、0.6 的变更见
+> `docs/P5_external_review_crosscheck.md`、`docs/P6_offline_llm_gate.md`。
+
 面向企业赛：在平台的 B 题检查点上做**无人干预**的续训—评估—上线/回滚闭环，并留下可审计的决策链。
 
 ## 一、结构
@@ -75,7 +84,7 @@ bash build_image.sh
 | `DATA_DIR` | `/data`（无则 `/app/public`） | 含 `train.jsonl` / `validation.jsonl` |
 | `CKPT` | `/app/checkpoint.npz` | 起点检查点 |
 | `RUN_DIR` | `/app/runs` | 轮次输出、决策日志、状态 |
-| `MAX_ROUNDS` | 3 | 最多几轮 |
+| `MAX_ROUNDS` | 2 | 最多几轮（0.8 起由 3 改 2，为的是压进平台窗口） |
 | `EPOCH_BUDGET` | 330 | **每条轨迹**的轮数预算（105 × 3 轮量级）；6 轨迹时真实训练量 ×6，另记 `track_epochs_used` |
 | `START_CKPT` | 与 `CKPT` 同目录的 `checkpoint.start.npz` | 官方起点备份；`publish` 覆盖 `CKPT` 后，续训重启指向它 |
 | `MIN_TAIL_N` | 30 | 尾段样本少于此数时，末端权衡条款不适用 |
@@ -84,7 +93,7 @@ bash build_image.sh
 | `TAIL_MINUTES` | 100 | 末端判定阈值（分钟） |
 | `TAIL_TRADE_GAIN` | 0.20 | 末端权衡条款：末端至少改善多少才可换取总体退让 |
 | `TAIL_TRADE_RMSE` | 0.06 | 末端权衡条款：总体 RMSE 允许退让的上限 |
-| `WALL_LIMIT_S` | 1500 | 墙钟上限 |
+| `WALL_LIMIT_S` | 390 | 墙钟预算（秒）。每轮开始前用「上一轮实测 × 1.2」估下一轮，装不进预算就收尾：先写 summary 再退 0，不等平台来杀 |
 | `ZXJ_INPUT_MODE` | `abs8log` | `none` / `abs8` / `abs8log`；`none` 为复现官方行为 |
 | `ZXJ_TARGET_POWER` | 0.45 | 目标变换 y'=y**p；`1.0` 为参考行为，`0.5` 回到第一版形态 |
 | `ENSEMBLE_BATCH` | `96,112,128,144,192,256` | 集成轨迹的 batch_size 列表；留空退化为单轨迹训练 |
@@ -94,7 +103,8 @@ bash build_image.sh
 | `PYTRiO_MODEL` | `Qwen/Qwen3.8-27B` | 基模名或自训权重路径 |
 | `PYTRiO_MAX_TOKENS` | 1200 | 单次提案输出上限。27B 带思考链，给 200 会全耗在 thinking 上、content 返回空 |
 | `PYTRiO_REASONING_EFFORT` | `low` | `low` / `medium`，不支持 `minimal`（422）。`low` 实测 token 减半且结论相同 |
-| `PYTRiO_TIMEOUT` / `PYTRiO_RETRIES` | 60 / 2 | 超时秒数与重试次数 |
+| `ZXJ_USE_LLM` | `0` | 大模型提案总开关。**离线评测必须为 0**：凭证被平台注入也不调用，直接走策略表 |
+| `PYTRiO_TIMEOUT` / `PYTRiO_RETRIES` | 8 / 1 | 超时秒数与重试次数（0.6 从 60/2 收紧：评测机不出网时，长超时会把运行窗口耗光） |
 
 凭证可放在 `pkg_b/.env.pytrio`（已被 `.dockerignore` 排除），格式 `KEY=VALUE`，程序启动时自动载入；已存在的环境变量优先级更高，便于临时覆盖。**不要写进 `Dockerfile` 的 `ENV`**。
 

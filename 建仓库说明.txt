@@ -1,0 +1,40 @@
+建仓库说明（约 5 分钟）
+==============================
+
+要做什么
+--------
+把本目录里的源码推到一个【公开】GitHub 仓库，然后把仓库地址发回给我。
+建议仓库名：zxj-bearing-rul
+必须 Public：评审点开链接不能要求登录，私有仓库等于这项材料作废。
+
+方式一：装了 git（最快，两条命令）
+--------------------------------
+1) 打开 https://github.com/new ，仓库名填 zxj-bearing-rul，选 Public，
+   不要勾 "Add a README file"，点 Create repository。
+2) 在本目录（有 .git 的那一层）执行：
+     git remote add origin https://github.com/你的用户名/zxj-bearing-rul.git
+     git push -u origin main
+   认证时用户名填 GitHub 用户名，密码填 PAT（Personal Access Token），
+   不是账号登录密码——GitHub 已经不支持密码推送。
+3) 把 https://github.com/你的用户名/zxj-bearing-rul 发回来。
+
+本目录已经包含 .git 和两次提交，直接 push 即可，不需要 git init / git add。
+
+方式二：只用网页，不装 git
+--------------------------
+1) 打开 https://github.com/new ，仓库名 zxj-bearing-rul，选 Public，点 Create repository。
+2) 在新页面点 "uploading an existing file"。
+3) 把本目录里【除 .git 之外】的所有文件和文件夹拖进去（Chrome / Edge 可以整个文件夹拖）。
+4) 等全部上传完，点 Commit changes。
+
+自检（做完花 10 秒）
+--------------------
+退出 GitHub 登录（或用无痕窗口）打开仓库地址：
+- 能看到 README，标题是「智训引擎 · B 题源代码包」→ 成功
+- 页面提示 404 或要求登录 → 仓库还是私有的，去 Settings 改成 Public
+
+不要做的事
+----------
+- 不要往仓库里加 API Key、.env 文件（本目录已确认没有，别再手动补）
+- 不要改文件名和目录结构，README 里的复现命令按现在的路径写
+- 不要用 Fork 的 ESP32 那几个仓库，必须是新建的

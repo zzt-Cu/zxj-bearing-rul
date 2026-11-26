@@ -10,20 +10,14 @@ from baselines.data import sha256
 from baselines.train import train_run
 
 
-def _ensemble():
+def ensemble_sizes(spec):
     """镜像级固定策略：同一续训起点跑多条 batch_size 轨迹再平均权重，用于压掉单轨迹过拟合。
 
-    由 ENSEMBLE_BATCH 控制（逗号分隔）。未设置或只有一条时退化为单轨迹训练，
-    行为与官方基线完全一致。
+    取值来自 profile（B 是 96/112/128/144/192/256），可用 ENSEMBLE_BATCH 覆盖。
+    只有一条时退化为单轨迹训练，行为与官方基线完全一致。
+    A/C 默认不启用：它们的数据量与任务形态不需要这个手段，硬套只会增加解释成本。
     """
-    raw = os.environ.get("ENSEMBLE_BATCH", "").strip()
-    if not raw:
-        return None
-    sizes = []
-    for part in raw.split(","):
-        part = part.strip()
-        if part:
-            sizes.append(int(part))
+    sizes = [int(size) for size in (spec.ensemble or [])]
     return sizes if len(sizes) >= 2 else None
 
 
@@ -63,9 +57,13 @@ def run_round(spec, proposal, parent_checkpoint, round_index):
         restarted = True
 
     out_dir.parent.mkdir(parents=True, exist_ok=True)
-    stage_id = "%s-round-%02d" % (spec.stage_prefix, round_index)
+    # B 的 stage_id 必须保持 `zxj-round-NN`：它进 checkpoint 元数据，改了会连带改
+    # 发布指纹 c8bd6608…，而那个指纹已经写进已提交的文档里。A/C 才加题目前缀区分。
+    prefix = spec.stage_prefix if spec.profile == "B" else "%s-%s" % (spec.stage_prefix, spec.profile.lower())
+    stage_id = "%s-round-%02d" % (prefix, round_index)
+    tracks = ensemble_sizes(spec)
     report = train_run(
-        "B",
+        spec.profile,
         spec.train_jsonl,
         spec.validation_jsonl,
         out_dir,
@@ -73,7 +71,7 @@ def run_round(spec, proposal, parent_checkpoint, round_index):
         epochs=int(proposal["epochs"]),
         learning_rate=float(proposal["lr"]),
         batch_size=int(proposal["batch_size"]),
-        ensemble=_ensemble(),
+        ensemble=tracks,
         stage_id=stage_id,
     )
     checkpoint = out_dir / "checkpoint.npz"
@@ -86,10 +84,12 @@ def run_round(spec, proposal, parent_checkpoint, round_index):
         "restarted_from_start": restarted,
         "restart_from": parent,
         "restart_from_sha256": report.get("parent_checkpoint_sha256"),
-        "ensemble_tracks": len(_ensemble() or [1]),
+        "ensemble_tracks": len(tracks or [1]),
         "stage_id": stage_id,
         "initial_steps": report.get("initial_steps"),
         "final_steps": report.get("final_steps"),
         "training_seconds": report.get("training_seconds"),
-        "self_reported_rmse": report.get("validation_after", {}).get("rmse"),
+        "self_reported": (report.get("validation_after") or {}),
+        "self_reported_rmse": (report.get("validation_after") or {}).get("rmse"),
+        "self_reported_macro_f1": (report.get("validation_after") or {}).get("macro_f1"),
     }

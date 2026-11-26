@@ -1,17 +1,23 @@
-智训引擎 · B 题（轴承健康评估 / 剩余寿命 RUL）模型配置　【v4 · 定稿】
+智训引擎 · B 题（轴承健康评估 / 剩余寿命 RUL）模型配置　【v5 · 定稿】
 ================================================================
-队伍：北京工商大学  |  更新：2026-11-24 10:30
-对应镜像：zxj-harness:0.5（linux/amd64，tar 40.5 MB，sha256 d70f3a47…）  对应检查点：checkpoint.npz
-版本说明：v4 相对 v3 的改动全部属于"交付可靠性"，模型与成绩一字未动：
-  1) 检查点发布——采纳后把最优权重原子写回 /app/checkpoint.npz 与
-     best_checkpoint.npz，并记录 submitted_checkpoint_sha256。v3 只写
-     runs/round-01/checkpoint.npz，若平台按默认路径取模型会拿到官方起点。
-  2) 起点备份——原始 checkpoint.npz 备份为 checkpoint.start.npz，后续轮次的
-     重启目标指向备份（否则第 2 轮会把权重平均点当起点，重新触发 P3 的崩坏）。
-  3) 无验证集分支改记 advance_unverified 并真正推进；门控补"单根轴承退化上限
-     25%"与"尾段最少 30 条"；自检从 8 项增到 10 项。
-成绩与 v3 完全一致：容器内 RMSE 302.75 / MAE 230.41 / 末端 274.52，
-三轮闭环 302.75 采纳 → 305.99 回滚 → 342.01 回滚。
+队伍：北京工商大学  |  更新：2026-11-26 23:55
+对应镜像：zxj-harness:0.9（linux/amd64，tar 45,983,232 字节，sha256 ca9ea79e…）  对应检查点：checkpoint.npz
+版本说明：v5 相对 v4 的唯一改动是「一个镜像装三题」，B 题的模型、超参与成绩一字未动：
+  1) 镜像内新增 A/B/C 三题的 profile 表与路由层 harness/preflight.py。入口从
+     harness.loop 改为 harness.preflight——它必须在 import baselines 之前把
+     ZXJ_INPUT_MODE / ZXJ_TARGET_POWER 定好，因为 model.py 在导入时就把这两项
+     读成模块级常量，之后再改环境变量无效。
+  2) 新增 baselines_ckpt/A.npz 与 C.npz 两份起点；B 的起点仍在 /app/checkpoint.npz。
+  3) 镜像内新增 A/C 的 profile（轮次、预算、门控条款不同），B 的取值与 0.8 逐位一致。
+  4) 自检从 10 项增到 12 项：新增「三题基线检查点可加载」与「三题路由判定正确」。
+  5) 镜像体积 204 MB -> 205 MB（tar 45.94 MB -> 46.00 MB），增量来自两份起点与路由层。
+逐位复核：0.9 在容器内跑出 302.75 / 305.99，与 0.5、0.8 完全相同；回归分支的代码
+路径未改（psnorm 等新开关只对分类与另一套回归 profile 生效，B 走不到）。
+
+成绩（容器内，提交口径）：RMSE 302.75 / MAE 230.41 / 末端 274.52（n=242）。
+两轮闭环：302.75 采纳 → 305.99 回滚（0.9 起默认两轮）。第 3 轮 342.01 仍是回滚，
+    保留在策略表里但不跑；把它跑出来需要把 MAX_ROUNDS 调到 3。
+
 
 [1] 任务定义
 ----------------------------------------------------------------
@@ -100,14 +106,19 @@ target_scale  ：9.185445401063111
 
 [6] Harness 运行配置（镜像内置默认值）
 ----------------------------------------------------------------
+ZXJ_PROFILE         ：自动探测（B 的判据：inputs.features 为 {horizontal, vertical}）
+                      调试时可用 ZXJ_PROFILE=B 强制；正式评测不要设，按数据自动判
+ZXJ_PSNORM          ：0        逐样本量纲归一；B 题关闭（A 题专属，本版未启用）
+----------------------------------------------------------------
 EPOCH_BUDGET        ：330     每条轨迹的轮数预算（3 × 105，留 15 余量）；6 轨迹时
                               真实训练量是它的 6 倍，summary 的 track_epochs_used 记账
-MAX_ROUNDS          ：3       最多决策轮数（可用 -e 覆盖）
+MAX_ROUNDS          ：2       最多决策轮数（0.8 起由 3 降为 2；第 3 轮不改变结论）
 MIN_GAIN            ：0.005   上线所需相对改善（0.5%）
 TAIL_MINUTES        ：100     末端判定阈值（分钟）
 TAIL_TRADE_GAIN     ：0.20    末端改善达 20% 时可越过最小改善门槛
 TAIL_TRADE_RMSE     ：0.06    允许的总体 RMSE 退让上限（6%）
-WALL_LIMIT_S        ：1500    墙钟上限（秒）
+WALL_LIMIT_S        ：390     墙钟上限（秒）；每轮前用「上轮实测 × 1.2」估算，装不下就
+                              自己写 summary 再退 0，不等平台杀容器
 DATA_DIR            ：/app/public   训练/验证数据目录
 CKPT                ：/app/checkpoint.npz  起点检查点；采纳后覆盖为最优权重
 START_CKPT          ：/app/checkpoint.start.npz  官方起点备份（启动时生成，不覆盖）
@@ -160,10 +171,10 @@ meta 关键字段 ：format / task / paths / hidden / seed / epochs / steps /
 [9] 复现命令
 ----------------------------------------------------------------
 容器默认（无参数即运行完整闭环，内置上述全部配置）：
-  python -m harness.loop
+  python -m harness.preflight
 
 等价显式写法：
-  python -m harness.loop --data /app/public --ckpt /app/checkpoint.npz --run-dir /app/runs
+  python -m harness.preflight --data /app/public --ckpt /app/checkpoint.npz --run-dir /app/runs
 
 单轮复现（宿主机，验证 313.79）：
   export ZXJ_INPUT_MODE=abs8log ZXJ_TARGET_POWER=0.45
@@ -174,7 +185,7 @@ meta 关键字段 ：format / task / paths / hidden / seed / epochs / steps /
     --ensemble 96,112,128,144,192,256
   # 期望 validation_after.rmse = 313.7901，mae = 242.2905
 
-容器自检（10 项）：
+容器自检（12 项，含三题基线检查点与三题路由）：
   python selfcheck.py
 
 大模型连通性探测：
@@ -194,11 +205,18 @@ meta 关键字段 ：format / task / paths / hidden / seed / epochs / steps /
 5. 这套方法没有“越训越好”的累积能力：权重平均点不可续训（302.75 起训 3 轮、lr 1e-4
    即退回 352.7，6 条轨迹从 381~705 收敛到 352~354）。镜像已加硬约束：检测到
    aggregate=weight_average 就不再从它续训，改从官方起点独立训练下一候选
-   （0.5 版实测 305.99 / 342.01，均被门控回滚）。闭环本质是“多次独立尝试 + 选优”。
+   （实测第 2 轮 305.99、第 3 轮 342.01 均被门控回滚）。闭环本质是“多次独立尝试 + 选优”。
 6. 集成把单轮训练成本放大 6 倍（3 秒 -> 45 秒）；若预算被压到 50 epoch 以内，
    只能退化为单轨迹，最好结果 434.68（仍优于官方基线 36%）。账面 epoch（255）
    是每条轨迹的轮数，真实训练量 1530，两者都在 summary 里分别记录。
 7. 留一轴承 OOF 仍为 1,154（v2 口径，9 折未重跑），新工况上的优势会小于验证集数字。
-8. 平台没有公开"从哪个路径取模型"的契约。本版同时写 /app/checkpoint.npz、
+8. 三题同镜像带来一个部署侧的风险：若平台把三题的提交位指向同一个容器实例、或把三题
+   数据同时挂进一个容器，判题只会命中探测顺序先命中的那一题，另外两题被静默跳过。
+   正确用法是一个提交位一个容器实例、一份数据目录。日志首行 route.profile 是唯一能
+   确认这件事的地方，试运行时必须核对。
+9. 入口必须是 harness.preflight。若误用 -m harness.loop 直接启动，B 会以 abs8 而不是
+   abs8log 载入（模块级常量的坑），成绩偏离且日志无异样。本版 Dockerfile 的 CMD 已
+   固定为 preflight，平台按默认命令启动即正确。
+10. 平台没有公开"从哪个路径取模型"的契约。本版同时写 /app/checkpoint.npz、
    best_checkpoint.npz，并在 summary 里给出 submitted_checkpoint 与 sha256，
    三条路径都指向同一份权重；但若平台另有约定路径，仍以平台契约为准。

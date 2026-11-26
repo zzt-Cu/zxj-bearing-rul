@@ -28,10 +28,27 @@ BS_RANGE = (16, 512)
 DEFAULT_BASE_URL = "https://pytrio.com/api/openai/v1"
 DEFAULT_MODEL = "Qwen/Qwen3.8-27B"
 
+# 大模型调用闸门：默认关闭。凭证被平台注入不等于要调用——
+# 0.6 之前的行为是「有 key 就调」，评测环境出不了网时每次决策要等满 60 s 超时，
+# 三轮下来可以把平台 10 分钟的入口预检窗口吃光（2026-11-25 10:33 实测）。
+# 需要演示大模型链路时显式设 ZXJ_USE_LLM=1；默认走策略表，与已备案的 302.75 一致。
+_LLM_TRIPPED = False
 
-def _load_policy():
+
+def _load_policy(profile="B"):
+    """读策略表。B 的候选在顶层（保持原样），A/C 在 profiles 段里覆盖。
+
+    只有 candidates / reference / note 会被覆盖，grid 与 B 的实测记录始终保留，
+    这样日志里既能看出这一轮用的是哪张表，也不会丢掉 B 的历史证据。
+    """
     with POLICY_PATH.open(encoding="utf-8") as stream:
-        return json.load(stream)
+        data = json.load(stream)
+    section = (data.get("profiles") or {}).get(profile)
+    if not section:
+        return data
+    merged = dict(data)
+    merged.update(section)
+    return merged
 
 
 def _clamp(value, low, high):
@@ -61,21 +78,30 @@ def _describe(candidate):
 def _policy_proposal(facts, policy, epochs_left):
     candidates = policy["candidates"]
     rounds = int(facts.get("history_rounds", 0) or 0)
-    history = facts.get("history_rmse") or []
+    # A/C 的历史分在 history_score 里，B 的 history_rmse 是同一个量的旧名字
+    history = [value for value in (facts.get("history_score") or []) if value is not None]
+    if not history:
+        history = facts.get("history_rmse") or []
+    is_b = facts.get("profile", "B") == "B"
 
     # 首轮：直接用本机实测最优的那一组，不做探索
     if rounds == 0 or not history:
         chosen = dict(candidates[0])
+        prior = chosen.get("prior_rmse", chosen.get("prior"))
         return {"lr": chosen["lr"], "epochs": min(chosen["epochs"], epochs_left),
                 "batch_size": chosen["batch_size"], "source": "policy",
-                "reason": "首轮采用本机实测最优配置（%s，prior RMSE %s）"
-                          % (_describe(chosen), chosen.get("prior_rmse"))}
+                "reason": "首轮采用%s（%s，%s）"
+                          % ("本机实测最优配置" if is_b else "该题实测最优配置",
+                             _describe(chosen),
+                             ("prior RMSE %s" % prior) if is_b else ("prior %s" % prior))}
 
     # 之后严格按候选表逐条推进。表内顺序已按实测量级排列，避免在轮次预算只有个位数时
     # 做大跨度跳跃；上轮被采纳时额外沿用上一轮的学习率并衰减，做一次局部细化。
     index = min(rounds, len(candidates) - 1)
     chosen = dict(candidates[index])
-    best = facts.get("best_rmse")
+    best = facts.get("best_score") if not is_b else facts.get("best_rmse")
+    if best is None:
+        best = facts.get("best_rmse")
     last = history[-1]
     accepted = best is not None and last is not None and abs(float(last) - float(best)) < 1e-9
     if facts.get("best_is_aggregate"):
@@ -101,14 +127,16 @@ def _llm_settings():
         "base": os.environ.get("PYTRiO_BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
         "key": os.environ.get("PYTRiO_API_KEY", ""),
         "model": os.environ.get("PYTRiO_MODEL", DEFAULT_MODEL),
-        "timeout": float(os.environ.get("PYTRiO_TIMEOUT", "60")),
+        "timeout": float(os.environ.get("PYTRiO_TIMEOUT", "8")),
         # Qwen3.8-27B 带思考链：实测一次决策 230–800 个 reasoning token（随提示变长而增长）。
         # 给 800 会偶发"content 为空→加倍重试"，那一轮实际花掉约 2000 token，比直接给 1200 更贵。
         "max_tokens": int(os.environ.get("PYTRiO_MAX_TOKENS", "1200")),
         # 思考链强度：minimal 服务端不支持（422），low 实测 230 token / 3s，
         # medium 400 token / 7.7s，且两者给出的配置相同。省 Token 就是省客观分。
         "effort": os.environ.get("PYTRiO_REASONING_EFFORT", "low").strip().lower(),
-        "retries": max(1, int(os.environ.get("PYTRiO_RETRIES", "2"))),
+        "retries": max(1, int(os.environ.get("PYTRiO_RETRIES", "1"))),
+        # 只有显式打开才调模型；默认关闭，等价于「无凭证」时的策略表路径
+        "enabled": os.environ.get("ZXJ_USE_LLM", "0").strip().lower() in ("1", "true", "yes", "on"),
     }
 
 
@@ -186,8 +214,17 @@ def _llm_post(settings, prompt, json_mode, use_effort=True):
 
 
 def _llm_proposal(facts, policy, epochs_left):
+    global _LLM_TRIPPED
     settings = _llm_settings()
     if not settings["key"]:
+        return None
+    if not settings["enabled"]:
+        facts["_llm_error"] = {"kind": "disabled",
+                               "detail": "未设 ZXJ_USE_LLM=1，本轮按策略表推进（离线评测默认行为）"}
+        return None
+    if _LLM_TRIPPED:
+        facts["_llm_error"] = {"kind": "circuit_open",
+                               "detail": "本次运行已出现过一次网络失败，后续轮次不再尝试大模型"}
         return None
     prompt = _llm_prompt(facts, policy, epochs_left)
 
@@ -203,6 +240,9 @@ def _llm_proposal(facts, policy, epochs_left):
                 last_error = error
                 if error.get("kind") == "http" and error.get("status") in (400, 404, 422):
                     continue
+                if error.get("kind") == "network":
+                    # 网络不通换请求形状也没用，直接熔断，别让下一轮再等一次超时
+                    _LLM_TRIPPED = True
                 break
             text = result["content"] or ""
             if not text.strip():
@@ -261,8 +301,12 @@ def propose(facts, policy=None):
     return None
 
 
-def remember(proposal):
-    """把本轮方案写回策略表内存，供下一轮自适应使用。"""
-    policy = _load_policy()
+def remember(proposal, profile="B"):
+    """把本轮方案写回策略表内存，供下一轮自适应使用。
+
+    必须带 profile：否则下一轮拿到的是 B 的候选表，A/C 会从第 2 轮起跳回
+    「90ep / lr0.024 / bs96」这种为 B 设计、对 A/C 完全错误的配置。
+    """
+    policy = _load_policy(profile)
     policy["_last"] = {k: proposal[k] for k in ("lr", "epochs", "batch_size")}
     return policy

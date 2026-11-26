@@ -1,0 +1,5 @@
+# 统一换行符为 LF，保证 clone 下来的文件与 SHA256SUMS 逐字节一致
+* text=auto eol=lf
+*.npz binary
+*.tar binary
+*.png binary

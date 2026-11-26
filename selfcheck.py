@@ -86,7 +86,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     print("=" * 62)
-    print("智训引擎 B 题 Harness 容器自检")
+    print("智训引擎 A/B/C 三题 Harness 容器自检")
     print("=" * 62)
 
     def versions():
@@ -106,15 +106,21 @@ def main(argv=None):
 
     def pytrio_ready():
         key = os.environ.get("PYTRiO_API_KEY", "")
-        base = os.environ.get("PYTRiO_BASE_URL", "")
-        model_name = os.environ.get("PYTRiO_MODEL", "")
+        # 平台会把 Key 注入进来但不会带 BASE_URL / MODEL，这里必须给缺省值，
+        # 否则「凭证被注入」会让本项误判为失败（0.6 修）。
+        base = os.environ.get("PYTRiO_BASE_URL", "") or "https://pytrio.com/api/openai/v1"
+        model_name = os.environ.get("PYTRiO_MODEL", "") or "Qwen/Qwen3.8-27B"
+        use_llm = os.environ.get("ZXJ_USE_LLM", "0").strip().lower() in ("1", "true", "yes", "on")
         if not key:
             return "跳过（未配置 PYTRiO_API_KEY，planner 走策略表，功能不受影响）"
         if not base.startswith("http"):
             raise RuntimeError("已配置 Key 但 PYTRiO_BASE_URL 不合法：%r" % base)
         if not model_name:
             raise RuntimeError("已配置 Key 但 PYTRiO_MODEL 为空")
-        return "已配置 base=%s model=%s；连通性请另跑 pytrio_probe.py" % (base, model_name)
+        if not use_llm:
+            return ("已注入凭证 base=%s model=%s，但 ZXJ_USE_LLM=0：本次运行不调用大模型，"
+                    "按策略表推进（连通性请另跑 pytrio_probe.py）" % (base, model_name))
+        return "已配置并开启 base=%s model=%s；连通性请另跑 pytrio_probe.py" % (base, model_name)
     check("8. PyTRiO 配置", pytrio_ready)
 
     with tempfile.TemporaryDirectory(prefix="selfcheck-") as temporary:
@@ -245,6 +251,50 @@ def main(argv=None):
                 path.write_text(original, encoding="utf-8")
             return "%d 条完整记录，追加半截尾行后仍读出 %d 条" % (good, good)
         check("10. 决策日志容错", decisions_tolerant)
+
+        def three_baselines():
+            """三题共用一套代码，靠三份官方基线检查点区分；缺一份就等于有一题跑不了。"""
+            from harness import profiles
+            root = Path(__file__).resolve().parent
+            detail = []
+            for key in ("A", "C"):
+                path = profiles.default_ckpt(key, root)
+                if not path.is_file():
+                    raise RuntimeError("%s 的基线检查点缺失：%s" % (key, path))
+                model = Model.load(path)
+                prof = profiles.get(key)
+                if model.meta.get("task") != prof["task"]:
+                    raise RuntimeError("%s 的 task 不符：%s != %s"
+                                       % (key, model.meta.get("task"), prof["task"]))
+                if len(model.meta.get("paths") or []) != prof["n_features"]:
+                    raise RuntimeError("%s 的特征数不符：%d != %d"
+                                       % (key, len(model.meta.get("paths") or []), prof["n_features"]))
+                if key == "A" and list(model.meta.get("classes") or []) != profiles.CLASSES_A:
+                    raise RuntimeError("A 的类别顺序与任务书不一致")
+                detail.append("%s:%d维" % (key, len(model.meta["paths"])))
+            b_path = root / "checkpoint.npz"
+            if not b_path.is_file():
+                raise RuntimeError("B 的起点缺失：%s" % b_path)
+            detail.append("B:%d维" % len(Model.load(b_path).meta["paths"]))
+            return " / ".join(detail) + "，均可加载"
+        check("11. 三题基线检查点", three_baselines)
+
+        def router():
+            """判题只看 inputs 结构。构造三条最小样例，必须各自命中，异常结构必须被拒绝。"""
+            from harness import profiles
+            cases = {
+                "A": {"features": [0.1] * 128},
+                "B": {"features": {"horizontal": {"rms": 0.1}, "vertical": {"rms": 0.2}}},
+                "C": {"settings": [0.0, 0.0, 100.0], "sensors": [500.0] * 21},
+            }
+            for expect, inputs in cases.items():
+                got = profiles.detect_from_inputs(inputs)
+                if got != expect:
+                    raise RuntimeError("路由错误：期望 %s，得到 %s" % (expect, got))
+            if profiles.detect_from_inputs({"features": "oops"}) is not None:
+                raise RuntimeError("非法结构没有被拒绝")
+            return "A/B/C 三型输入各自命中，非法结构返回 None"
+        check("12. 三题路由", router)
 
     print("=" * 62)
     if FAILS:

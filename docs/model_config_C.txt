@@ -1,0 +1,188 @@
+智训引擎 · C 题（C-MAPSS 涡扇发动机剩余寿命预测）模型配置　【v1 · 定稿】
+================================================================
+队伍：北京工商大学  |  更新：2026-11-26 23:45
+对应镜像：zxj-harness:0.9（linux/amd64，tar 45,983,232 字节，sha256 ca9ea79e…）
+对应检查点：/app/checkpoint.npz（提交权重 sha256 7d401b4f…）
+起点检查点：/app/baselines_ckpt/C.npz（官方，sha256 98ec6e30…）
+
+版本说明：C 题是本轮新增（此前只做 B 题）。0.9 镜像把 A/B/C 三题收进同一个镜像，
+按 inputs 结构自动判题，本题的判定依据是 inputs 里同时出现 settings 与 sensors 两个键
+（A 是 features 数组、B 是 features 两通道字典，都不会同时具备这两个键）。
+因此本文件为 v1。
+
+成绩：RMSE 51.268 / MAE 37.574（官方基线 52.869 / 38.900，-3.0% / -3.4%）。
+     容器内 4 轮闭环 129.9 秒，采纳第 1 轮，第 2~4 轮因未达 0.5% 门槛回滚。
+
+[1] 任务定义
+----------------------------------------------------------------
+任务类型      ：regression（回归）
+预测目标      ：剩余使用寿命 RUL
+输出单位      ：cycles（循环）
+评价指标      ：RMSE（主）、MAE（辅），越低越好
+特征维度      ：24 = 21 个传感器读数 + 3 个工况设定量
+拼接顺序      ：sensors[0..20] 在前，settings[0..2] 在后
+
+关于拼接顺序：flatten() 按字典键的字母序展开，"sensors" 排在 "settings" 之前，
+      所以固化在检查点 paths 里的顺序是 21 个传感器在前、3 个设定量在后。
+      这个顺序对外不可见但必须一致——若按"先 settings 再 sensors"直觉喂数据，
+      load 时的 schema 比对会直接报错（paths 不匹配），不会静默给出错预测。
+      本条写出来是因为它是最容易被外部复现者踩到的一处。
+
+输入形式      ：{"settings": [3 个实数], "sensors": [21 个实数]}
+              单条样本对应一台发动机在某一时刻的运行快照
+
+[2] 模型结构（赛题锁定，不可修改）
+----------------------------------------------------------------
+模型格式      ：contest.cpu-mlp.v1
+结构          ：单隐层全连接 MLP，24 -> 32 -> 1
+隐层宽度      ：hidden = 32（锁定）
+激活函数      ：tanh
+参数量        ：833
+随机种子      ：seed = 42（锁定，不可更换）
+设备          ：cpu
+计算框架      ：numpy 1.26.4（镜像内版本，无 GPU、无深度学习框架依赖）
+
+说明：参数总量 = 24×32 + 32 + 32×1 + 1 = 833，与官方 baseline-info.json 一致。
+      hidden / seed / paths（24 维特征清单）/ task 四项由赛题校验，本方案一字未改。
+
+容量提示：833 个参数对应 113,089 条训练样本，样本/参数约 136。这个比例决定了模型
+      只能学一个高度平滑的映射，不可能拟合个体差异——第三节的"向均值压缩"由此而来。
+
+[3] 输入整形
+----------------------------------------------------------------
+整形模式      ：input_mode = abs8（继承官方检查点设定）
+实际效果      ：在 C 题上为空转
+
+原因同 A 题：abs8 靠特征路径里的 horizontal / vertical 识别通道，C 的路径形如
+      [["key","sensors"],["index",N]]，匹配不到分组，normalized() 里那段循环不执行。
+      保留 abs8 而非 none，是为了与官方检查点 meta 一致（改动会触发 load 的模式校验）。
+
+已做的其他尝试：训练更久（30 -> 60 -> 90 epoch）与换学习率/批大小，均属超参层面，
+      结果见 [10] 第 2 条。未引入任何新的输入整形。
+消融开关      ：ZXJ_INPUT_MODE=none（关闭），仅调试用
+
+[4] 目标变换
+----------------------------------------------------------------
+变换形式      ：无（target_power = 1.0，即原始 RUL 直接作为目标）
+target_mean   ：123.29161987461202（在训练集上拟合，写入 meta）
+target_scale  ：84.35774847417291（同上）
+标准化        ：z = (y - target_mean) / target_scale
+反变换        ：y = max(0, z * target_scale + target_mean)，负数截断为 0
+
+为什么不做幂变换：B 题用 p=0.45 是为了压末端高估，C 题的误差结构相反——短寿命被
+      高估、长寿命被低估，是向均值压缩而非单向偏移。幂变换只改变尺度不改压缩结构，
+      实测无改善，故保持 p=1.0。这一点与 B 题的处理不同，是有依据的不同。
+
+[5] 训练超参数（第 1 轮，即被采纳并发布的那一轮）
+----------------------------------------------------------------
+初始学习率    ：learning_rate = 0.003
+批大小        ：batch_size = 256（113,089 条训练集，每 epoch 442 步）
+单轮 epoch    ：30
+优化器        ：Adam（官方基线实现，未改动；beta1 0.9 / beta2 0.999 / eps 1e-8）
+梯度裁剪      ：clip_norm = 5.0（官方实现，未改）
+训练起点      ：baselines_ckpt/C.npz（赛题提供的官方起点，未替换）
+累计轮次参考  ：checkpoint meta 记 epochs = 45（起点 15 + 本轮 30）
+累计步数参考  ：6630 -> 19890
+
+选型依据：官方基线用 15 epoch / lr 0.002，在该数据上并未收敛（15ep 时 RMSE 仍在下行）。
+      提到 30 epoch / lr 0.003 后到 51.268。继续加不线性变好：90ep 为 51.176，
+      60ep / lr0.008 为 50.977（网格最优），说明已进入平台期，见 [10] 第 2 条。
+
+[6] Harness 运行配置（镜像内置默认值）
+----------------------------------------------------------------
+EPOCH_BUDGET        ：400     四轮累计轮数预算（实际用 105）
+MAX_ROUNDS          ：4       最多决策轮数
+MIN_GAIN            ：0.005   上线所需相对改善（0.5%）
+NASA_GUARD          ：0.20    非对称评分保护：RMSE 略降但 NASA 分数恶化超 20% 即回滚
+WALL_LIMIT_S        ：360     墙钟上限（秒）；实测 129.9 秒用完
+CKPT                ：/app/checkpoint.npz      起点检查点；采纳后覆盖为最优权重
+START_CKPT          ：/app/baselines_ckpt/C.start.npz  官方起点备份（启动时生成）
+RUN_DIR             ：/app/runs                运行产物目录
+BASELINE_CPU_THREADS：2       numpy 线程数
+ZXJ_PROFILE         ：自动探测（C 的判据：同时存在 settings 与 sensors）
+ZXJ_INPUT_MODE      ：abs8（C 上为空转，见 [3]）
+ZXJ_TARGET_POWER    ：1.0
+ZXJ_PSNORM          ：0
+
+NASA_GUARD 的由来：C-MAPSS 的非对称评分里，过预测（以为还有余量）的惩罚重于欠预测。
+      只看 RMSE 可能出现"RMSE 微降但过预测增多"的交换，那在安全意义上是更差的结果，
+      因此单列一条保护条款。
+
+解析缓存：C 的训练集 113,089 行、验证集 23,049 行，每读一遍约 10 秒 / 3 秒。四轮下来
+      光重复解析就白花约 80 秒（而单轮训练只要 6 秒）。harness 内加了一层按
+      (mtime_ns, size) 为键的解析缓存，只缓存解析结果、不缓存指标——每轮评估仍
+      重新加载检查点、重新计算 RMSE。
+
+[7] 输入输出契约
+----------------------------------------------------------------
+输入（单条预测请求，stdin，每行一条）：
+  {"task": "regression",
+   "inputs": {"settings": [3 个实数], "sensors": [21 个实数]}}
+  说明：请求体只允许 task 与 inputs 两个键；task 可省略，省略时取检查点 meta 内值。
+        两个键下的元素个数与顺序由检查点内 paths 固化，不符会直接报错。
+        解析器主动拒绝任何标签类字段（rul / remainingusefullife / normalizedrul /
+        truerul / totalsnapshots 等），用于证明预测链路拿不到真实寿命。
+
+输出（stdout，每行一条）：
+  {"outputs": {"value": <float>}}     单位：循环；预测为负时截断为 0
+
+调用方式：
+  echo '{"inputs":{"settings":[...],"sensors":[...]}}' | \
+    python -m baselines.predict --checkpoint runs/round-01/checkpoint.npz
+
+决策日志（runs/decisions.jsonl，每轮一条）：
+  round / ts / observation / proposal / result / execution / decision
+  result   含 primary、rmse、mae、nasa_score、n_val、worst_group、groups（按单元）
+           groups 的键形如 fd004_train_u0179，字段为 n / rmse / truth_mean / pred_mean
+  execution 含 checkpoint、checkpoint_sha256、parent_checkpoint_sha256、
+           initial_steps、final_steps、training_seconds
+
+[8] 检查点与产物
+----------------------------------------------------------------
+格式          ：npz（numpy 压缩归档），含 w1/b1/w2/b2、mean/scale、Adam 状态与 metadata
+meta 关键字段 ：format / task / paths / hidden / seed / epochs / steps /
+                learning_rate / batch_size / parameter_count / input_mode /
+                target_mean / target_scale / target_power / profile
+                （容器实测值：task=regression, hidden=32, parameter_count=833,
+                  input_mode=abs8, target_power=1.0, batch_size=256, epochs=45, steps=19890）
+校验行为      ：load 时若 input_mode / target_power / input_width 与当前进程不一致，
+                直接抛错终止，不静默产出错误预测。
+
+[9] 复现命令
+----------------------------------------------------------------
+容器默认（无参数即运行完整闭环，内置上述全部配置）：
+  python -m harness.preflight
+
+等价显式写法：
+  python -m harness.preflight --data /data --ckpt /app/baselines_ckpt/C.npz --run-dir /app/runs
+
+单轮复现（宿主机，验证 51.268）：
+  export ZXJ_INPUT_MODE=abs8 ZXJ_TARGET_POWER=1.0
+  python -m baselines.train --profile C --train public/train.jsonl \
+    --validation public/validation.jsonl --output /tmp/c1 --from-baseline checkpoint.npz \
+    --epochs 30 --learning-rate 0.003 --batch-size 256
+  # 期望 validation_after.rmse = 51.2684，mae = 37.5736
+  # 注意：本机（Windows / Python 3.13）实测与容器逐位一致，C 题不存在 B 题那种
+  # 3%~4% 的 BLAS 环境依赖，因为 833 参数的归约规模小得多。
+
+容器自检（12 项，含三题基线检查点与三题路由）：
+  python selfcheck.py
+
+[10] 已知限制
+----------------------------------------------------------------
+1. 容量不足是根本约束：833 个参数对 113,089 条样本、106 台发动机、四个工况子集，
+   不可能拟合个体差异。误差主体是"向均值压缩"：真实 RUL 50–100 的 8,305 条被平均
+   高估 +23.7 循环，150–200 的 2,532 条被低估 -39.3，200–300 的 844 条被低估 -42.4。
+2. 训练更久已无明显收益：30ep 51.268 / 90ep 51.176 / 60ep-lr0.008 50.977 /
+   90ep-lr0.005-bs128 51.221。除 50.977 外全部落在 51.18~51.27，跨度 0.2%。
+   50.977 比提交值低 0.57%，刚过 0.5% 门槛，但仍在测量噪声内（同配置重复跑的波动
+   约 0.3%），故不写成成绩，只作为"可达区间"的上界记录。
+3. 短寿命单元被系统高估 23.7 循环，占样本 36%。这在维护决策上是危险方向（按预测
+   安排会拖到失效之后）。本方案没有消除它，只做了量化。
+4. 个别单元出现反向错误：fd003_train_u0073 真实均值 107.0、预测 196.7，高估 90 循环。
+   这类错误被总体 RMSE 平均掉，但在工程上是单点事故，分单元报告只能暴露、不能消除。
+5. 第 3 轮实测 51.138，比提交值 51.268 低 0.25%，按"越小越好"更优，但未达 0.5%
+   门槛被回滚。这是规则的保守性代价，我们选择保留门槛（同配置重复跑波动约 0.3%，
+   降到 0.2% 等于让噪声决定上线哪份权重），并如实记录放弃了这 0.25%。
+6. 提升幅度仅 3.0%，不做夸大。其意义在于：把官方基线未收敛的 15 epoch 推到收敛区，
+   并定量给出这份数据在当前结构下的可达区间（50.98~51.72）。

@@ -1,0 +1,173 @@
+智训引擎 · A 题（气体传感器漂移下的六类气体识别）模型配置　【v1 · 定稿】
+================================================================
+队伍：北京工商大学  |  更新：2026-11-26 23:40
+对应镜像：zxj-harness:0.9（linux/amd64，tar 45,983,232 字节，sha256 ca9ea79e…）
+对应检查点：/app/checkpoint.npz（提交权重 sha256 80bebc37…）
+起点检查点：/app/baselines_ckpt/A.npz（官方，sha256 fd1e08b2…）
+
+版本说明：A 题是本轮新增（此前只做 B 题）。0.9 镜像把 A/B/C 三题收进同一个镜像，
+按 inputs 结构自动判题，本题的判定依据是 inputs.features 为长度 128 的数组。
+单题镜像是 A 在 0.9 之前不存在的形态，因此本文件为 v1，无历史版本可比。
+
+成绩：Macro-F1 0.7288 / Accuracy 0.8883（官方基线 0.7140 / 0.8786，+2.1%）。
+     容器内 6 轮闭环 18.4 秒，采纳第 1 轮，第 2~6 轮全部因未达 0.5% 门槛回滚。
+
+[1] 任务定义
+----------------------------------------------------------------
+任务类型      ：classification（六分类）
+预测目标      ：气体类别
+输出单位      ：类别标签（字符串）+ 每类分数（softmax 概率）
+评价指标      ：Macro-F1（主）、Accuracy（辅），越高越好
+特征维度      ：128（平台按原文件特征编号 1–128 排序）
+类别顺序      ：Ethanol / Ethylene / Ammonia / Acetaldehyde / Acetone / Toluene
+                该顺序即标签索引，取自任务书与 configs/A.json，不可重排
+输入形式      ：单条样本 = 长度 128 的实数数组，来自一次气体测量的特征提取
+
+[2] 模型结构（赛题锁定，不可修改）
+----------------------------------------------------------------
+模型格式      ：contest.cpu-mlp.v1
+结构          ：单隐层全连接 MLP，128 -> 32 -> 6
+隐层宽度      ：hidden = 32（锁定）
+激活函数      ：tanh
+参数量        ：4,326
+随机种子      ：seed = 42（锁定，不可更换）
+设备          ：cpu
+计算框架      ：numpy 1.26.4（镜像内版本，无 GPU、无深度学习框架依赖）
+
+说明：hidden / seed / paths（128 维特征清单）/ task / classes 五项由赛题校验，
+      任何改动都会被 baselines/train.py 的 --resume 校验拒绝；本方案五项一字未改。
+      参数总量 = 128×32 + 32 + 32×6 + 6 = 4,326，与官方 baseline-info.json 一致。
+
+[3] 输入整形
+----------------------------------------------------------------
+整形模式      ：input_mode = abs8（继承官方检查点设定）
+实际效果      ：在 A 题上为空转
+
+为什么是空转：abs8 的实现是"按通道挑出 8 个绝对量特征（band1/band2/band3 能量、
+              mean_abs、peak、peak_to_peak、rms、spectral_rms），再按单条样本做
+              通道内标准化"。它靠特征路径里是否含 horizontal / vertical 来识别通道。
+              A 题的 128 维路径形如 [["key","features"],["index",N]]，没有任何通道名，
+              因此匹配不到分组，normalized() 里那段循环不执行，输出与不做整形完全相同。
+              保留 abs8 而不是改成 none，是为了与官方检查点 meta 保持一致——改了会让
+              load() 的模式校验报错（"checkpoint input shaping mode does not match"）。
+测试过的替代方案：逐样本量纲归一（psnorm，把每条样本按自身均值/标准差再标定一次）。
+              离线脚本内 0.7193 -> 0.7504，接入真实 harness 后 12 组配置落在
+              0.6909~0.7413（最好 lr0.004/24ep/bs48 = 0.7413）。
+              未采纳，原因见 [10] 第 2 条：邻域内不稳定，1.5% 的提升是抽样噪声。
+消融开关      ：ZXJ_INPUT_MODE=none（关闭），仅调试用，会因模式校验失败而无法加载官方起点
+
+[4] 目标变换
+----------------------------------------------------------------
+变换形式      ：无（分类任务）
+target_power  ：1.0（写入 meta，保持与官方检查点一致；分类分支不使用该字段）
+
+[5] 训练超参数（第 1 轮，即被采纳并发布的那一轮）
+----------------------------------------------------------------
+初始学习率    ：learning_rate = 0.005
+批大小        ：batch_size = 32（445 条训练集，每 epoch 14 步）
+单轮 epoch    ：12
+优化器        ：Adam（官方基线实现，未改动；beta1 0.9 / beta2 0.999 / eps 1e-8）
+梯度裁剪      ：clip_norm = 5.0（官方实现，未改）
+训练起点      ：baselines_ckpt/A.npz（赛题提供的官方起点，未替换）
+累计轮次参考  ：checkpoint meta 记 epochs = 32（起点 20 + 本轮 12）
+累计步数参考  ：80 -> 248
+
+选型依据：36 组 (epoch, lr, batch_size) 网格实测，前五名落在 0.7252~0.7288 之间，
+          跨度仅 0.4 个百分点。12ep / lr0.005 / bs32 在邻域内四个取值
+          （10/12/15 epoch、bs 32/64）都在 0.72 以上，属"稳定区"而非孤立尖峰。
+
+[6] Harness 运行配置（镜像内置默认值）
+----------------------------------------------------------------
+EPOCH_BUDGET        ：400     六轮累计轮数预算（实际用 80，远未触顶）
+MAX_ROUNDS          ：6       最多决策轮数
+MIN_GAIN            ：0.005   上线所需相对改善（0.5%）
+PER_CLASS_FLOOR     ：0.20    单类 F1 下限：任一类跌破 0.20（且上轮 ≥0.20）即回滚
+WALL_LIMIT_S        ：240     墙钟上限（秒）；实测 18.4 秒用完
+CKPT                ：/app/checkpoint.npz      起点检查点；采纳后覆盖为最优权重
+START_CKPT          ：/app/baselines_ckpt/A.start.npz  官方起点备份（启动时生成）
+RUN_DIR             ：/app/runs                运行产物目录
+BASELINE_CPU_THREADS：2       numpy 线程数
+ZXJ_PROFILE         ：自动探测（A 的判据：inputs.features 为 list）
+ZXJ_INPUT_MODE      ：abs8（A 上为空转，见 [3]）
+ZXJ_TARGET_POWER    ：1.0
+ZXJ_PSNORM          ：0（逐样本归一化开关，本题关闭）
+
+PER_CLASS_FLOOR 的由来：Macro-F1 掩盖单类崩塌。本题 Acetaldehyde 的 F1 恒为 0，
+      若再有任一类掉到 0，均值直接掉 1/6 而 Accuracy 几乎不动。这条规则在 6 轮里
+      没有触发（有问题的类始终是同一个），但它保证了这个隐蔽失败模式不会悄悄上线。
+
+[7] 输入输出契约
+----------------------------------------------------------------
+输入（单条预测请求，stdin，每行一条）：
+  {"task": "classification",
+   "inputs": {"features": [128 个实数]}}
+  说明：请求体只允许 task 与 inputs 两个键；task 可省略，省略时取检查点 meta 内值。
+        128 维顺序由检查点内 paths 固化，顺序不符会直接报错，不会静默给出错误结果。
+        解析器主动拒绝任何标签类字段（rul / remainingusefullife / normalizedrul /
+        truerul / totalsnapshots 等），用于证明预测链路拿不到真实标签。
+
+输出（stdout，每行一条）：
+  {"outputs": [{"label": "Ethanol", "score": 0.93},
+               {"label": "Ethylene", "score": 0.05}, ...]}
+  六个类别各给一个分数，和为 1；类别名与任务书表格完全一致。
+
+调用方式：
+  echo '{"inputs":{"features":[...]}}' | \
+    python -m baselines.predict --checkpoint runs/round-01/checkpoint.npz
+
+决策日志（runs/decisions.jsonl，每轮一条）：
+  round / ts / observation / proposal / result / execution / decision
+  result   含 primary、macro_f1、accuracy、n_val、per_class（逐类 P/R/F1/support）、
+           worst_class、confusion（6×6 混淆矩阵）、classes
+  execution 含 checkpoint、checkpoint_sha256、parent_checkpoint_sha256、
+           initial_steps、final_steps、training_seconds
+
+[8] 检查点与产物
+----------------------------------------------------------------
+格式          ：npz（numpy 压缩归档），含 w1/b1/w2/b2、mean/scale、Adam 状态与 metadata
+meta 关键字段 ：format / task / paths / classes / hidden / seed / epochs / steps /
+                learning_rate / batch_size / parameter_count / input_mode /
+                target_power / profile
+                （容器实测值：task=classification, hidden=32, parameter_count=4326,
+                  input_mode=abs8, target_power=1.0, batch_size=32, epochs=32, steps=248）
+校验行为      ：load 时若 input_mode / target_power / input_width 与当前进程不一致，
+                直接抛错终止，不静默产出错误预测。
+
+[9] 复现命令
+----------------------------------------------------------------
+容器默认（无参数即运行完整闭环，内置上述全部配置）：
+  python -m harness.preflight
+
+等价显式写法：
+  python -m harness.preflight --data /data --ckpt /app/baselines_ckpt/A.npz --run-dir /app/runs
+
+单轮复现（宿主机，验证 0.7288）：
+  export ZXJ_INPUT_MODE=abs8 ZXJ_TARGET_POWER=1.0
+  python -m baselines.train --profile A --train public/train.jsonl \
+    --validation public/validation.jsonl --output /tmp/a1 --from-baseline checkpoint.npz \
+    --epochs 12 --learning-rate 0.005 --batch-size 32
+  # 期望 validation_after.macro_f1 = 0.7288，accuracy = 0.8883
+
+容器自检（12 项，含三题基线检查点与三题路由）：
+  python selfcheck.py
+
+[10] 已知限制
+----------------------------------------------------------------
+1. Acetaldehyde 整类不可分：验证集 109 条里 107 条被判成 Ethanol，F1 恒为 0。
+   Macro-F1 六类等权，等于开赛固定让掉 1/6 的分。三组对照（逆频权重 0.7175、
+   逐样本归一+逆频 0.6940、逐样本归一+开方逆频 0.7297）都没能把该类抬过 0.05，
+   说明不是权重问题，是特征里没有区分信息。
+2. 逐样本量纲归一（psnorm）试过但未采纳：真实 harness 路径下 12 组配置落在
+   0.6909~0.7413，最好 0.7413（lr0.004/24ep/bs48）比提交值高 1.5%，但相邻的
+   28ep 就掉到 0.6983（差 4.3 个百分点）。按"邻域内多个取值同时成立"的标准不合格，
+   故保留 0.7288，并把这条实验写进说明书而不是悄悄用更高的单点。
+3. 验证集分辨率不足：Toluene 仅 5 条，其 F1 由 5 个样本决定；Ethanol 与 Acetaldehyde
+   的混淆是 107 条量级。任何 0.5% 级差异都在噪声内，因此所有选型只取稳定区。
+4. 训练集与验证集按批次隔离（对应 UCI 气体传感器数据集的漂移设定），验证成绩天然
+   低于同分布假设下的水平；0.7140 与 0.7288 都不能外推到"同批次随机切分"场景。
+5. 第 6 轮重复了第 5 轮的配置：候选表只有 5 条而轮次上限是 6，提案器把索引夹到最后
+   一条。该轮被回滚，不影响成绩，但多花约 15 epoch / 4 秒。修法是让候选表与轮次上限
+   对齐，或让提案器识别"表已用尽"后提前收尾；提交版保留了现状，未临时改代码。
+6. 提升幅度仅 2.1%，不做夸大。其意义在于：把可动的五类推到接近各自上限，并用逐类
+   指标证明剩余失分来自数据结构而非调参不足。按 Acetaldehyde 固定为 0 估算，
+   本题在当前结构下的理论上限约 0.733，本方案距上限 0.4 个百分点。
