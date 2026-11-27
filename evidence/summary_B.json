@@ -1,0 +1,542 @@
+[
+ {
+  "artifact_id": "art-b-r01",
+  "round_index": 1,
+  "metrics": {
+   "rmse": 303.6348783439981,
+   "mae": 231.12972800849437
+  },
+  "score": 303.6348783439981,
+  "receipt": {
+   "artifact_id": "art-b-r01",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45476,
+     "sha256": "sha256:eb2a6f71a44af741d6f20f6c62bf6f3680430e39593cdc635263a4fb126156d6"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r01",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 673.730177 -> 303.634878；达到 0.2% 门槛，采纳本轮候选。",
+  "hypothesis": "第 1 轮：父模型验证 rmse=673.730177。本轮以 epochs=105、lr=0.03、batch=96 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-1-1"
+  ],
+  "epochs": 105,
+  "lr": 0.03,
+  "seconds": 20.0
+ },
+ {
+  "artifact_id": "art-b-r02",
+  "round_index": 2,
+  "metrics": {
+   "rmse": 515.3177704687241,
+   "mae": 421.4323272902499
+  },
+  "score": 515.3177704687241,
+  "receipt": {
+   "artifact_id": "art-b-r02",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45480,
+     "sha256": "sha256:2b915bbba357d80ba8b7d493edd0aaad23644d513a0515e520f65df4b0636723"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r02",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 515.317770；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 2 轮：父模型验证 rmse=303.634878。本轮以 epochs=14、lr=0.03、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-2-2"
+  ],
+  "epochs": 14,
+  "lr": 0.03,
+  "seconds": 5.8
+ },
+ {
+  "artifact_id": "art-b-r03",
+  "round_index": 3,
+  "metrics": {
+   "rmse": 515.3845637554334,
+   "mae": 427.36562245162554
+  },
+  "score": 515.3845637554334,
+  "receipt": {
+   "artifact_id": "art-b-r03",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45480,
+     "sha256": "sha256:805aab4d82ace1211a4b6960c2fdf5c259ad4b7791e3e75e64c732947a46bcee"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r03",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 515.384564；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 3 轮：父模型验证 rmse=303.634878。本轮以 epochs=7、lr=0.02、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-3-3"
+  ],
+  "epochs": 7,
+  "lr": 0.02,
+  "seconds": 5.8
+ },
+ {
+  "artifact_id": "art-b-r04",
+  "round_index": 4,
+  "metrics": {
+   "rmse": 421.89988234626765,
+   "mae": 333.20744756165203
+  },
+  "score": 421.89988234626765,
+  "receipt": {
+   "artifact_id": "art-b-r04",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45484,
+     "sha256": "sha256:f5074bec431f330400331976b1f5d29ac1007b708d8942ea7f38d28984ed95fc"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r04",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 421.899882；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 4 轮：父模型验证 rmse=303.634878。本轮以 epochs=2、lr=0.005、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-4-4"
+  ],
+  "epochs": 2,
+  "lr": 0.005,
+  "seconds": 5.4
+ },
+ {
+  "artifact_id": "art-b-r05",
+  "round_index": 5,
+  "metrics": {
+   "rmse": 530.4029722133637,
+   "mae": 433.1592667908588
+  },
+  "score": 530.4029722133637,
+  "receipt": {
+   "artifact_id": "art-b-r05",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45480,
+     "sha256": "sha256:c1d2f2c2c598ddb04692b02d6837b35d0cb2edd9459a5f09351b07e92e26be29"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r05",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 530.402972；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 5 轮：父模型验证 rmse=303.634878。本轮以 epochs=2、lr=0.03、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-5-5"
+  ],
+  "epochs": 2,
+  "lr": 0.03,
+  "seconds": 5.6
+ },
+ {
+  "artifact_id": "art-b-r06",
+  "round_index": 6,
+  "metrics": {
+   "rmse": 432.9020609793432,
+   "mae": 347.2365215933273
+  },
+  "score": 432.9020609793432,
+  "receipt": {
+   "artifact_id": "art-b-r06",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45480,
+     "sha256": "sha256:751e419413da4ada355dd84f7411043761eebe46b4f8e2a15a3416440200921f"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r06",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 432.902061；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 6 轮：父模型验证 rmse=303.634878。本轮以 epochs=4、lr=0.02、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-6-6"
+  ],
+  "epochs": 4,
+  "lr": 0.02,
+  "seconds": 5.4
+ },
+ {
+  "artifact_id": "art-b-r07",
+  "round_index": 7,
+  "metrics": {
+   "rmse": 421.89988234626765,
+   "mae": 333.20744756165203
+  },
+  "score": 421.89988234626765,
+  "receipt": {
+   "artifact_id": "art-b-r07",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45484,
+     "sha256": "sha256:f5074bec431f330400331976b1f5d29ac1007b708d8942ea7f38d28984ed95fc"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r07",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 421.899882；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 7 轮：父模型验证 rmse=303.634878。本轮以 epochs=2、lr=0.005、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-7-7"
+  ],
+  "epochs": 2,
+  "lr": 0.005,
+  "seconds": 5.3
+ },
+ {
+  "artifact_id": "art-b-r08",
+  "round_index": 8,
+  "metrics": {
+   "rmse": 530.4029722133637,
+   "mae": 433.1592667908588
+  },
+  "score": 530.4029722133637,
+  "receipt": {
+   "artifact_id": "art-b-r08",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45480,
+     "sha256": "sha256:c1d2f2c2c598ddb04692b02d6837b35d0cb2edd9459a5f09351b07e92e26be29"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r08",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 530.402972；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 8 轮：父模型验证 rmse=303.634878。本轮以 epochs=2、lr=0.03、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-8-8"
+  ],
+  "epochs": 2,
+  "lr": 0.03,
+  "seconds": 5.3
+ },
+ {
+  "artifact_id": "art-b-r09",
+  "round_index": 9,
+  "metrics": {
+   "rmse": 432.9020609793432,
+   "mae": 347.2365215933273
+  },
+  "score": 432.9020609793432,
+  "receipt": {
+   "artifact_id": "art-b-r09",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45480,
+     "sha256": "sha256:751e419413da4ada355dd84f7411043761eebe46b4f8e2a15a3416440200921f"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r09",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 432.902061；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 9 轮：父模型验证 rmse=303.634878。本轮以 epochs=4、lr=0.02、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-9-9"
+  ],
+  "epochs": 4,
+  "lr": 0.02,
+  "seconds": 5.4
+ },
+ {
+  "artifact_id": "art-b-r10",
+  "round_index": 10,
+  "metrics": {
+   "rmse": 421.89988234626765,
+   "mae": 333.20744756165203
+  },
+  "score": 421.89988234626765,
+  "receipt": {
+   "artifact_id": "art-b-r10",
+   "artifact": {
+    "checkpoint_paths": [
+     "checkpoint.npz"
+    ],
+    "code_paths": [
+     "baselines/model.py",
+     "baselines/data.py"
+    ],
+    "predict_argv": [
+     "python3",
+     "/app/harness.py",
+     "predict"
+    ]
+   },
+   "files": [
+    {
+     "path": "baselines/data.py",
+     "size_bytes": 3994,
+     "sha256": "sha256:6099e312829ac3aaf48209ec1f618532c4a8552fedf73f09cf31c8876261db65"
+    },
+    {
+     "path": "baselines/model.py",
+     "size_bytes": 20512,
+     "sha256": "sha256:fb6826ee4578474d81d0f2c0b2ba392ed27e57e39a3fae3ad310b6dcbb34af2b"
+    },
+    {
+     "path": "checkpoint.npz",
+     "size_bytes": 45484,
+     "sha256": "sha256:f5074bec431f330400331976b1f5d29ac1007b708d8942ea7f38d28984ed95fc"
+    }
+   ]
+  },
+  "dir": "C:\\Users\\LENOVO\\WorkBuddy\\2026-11-17-09-05-02\\_sdk_local\\runs_final\\artifacts\\art-b-r10",
+  "selected": "art-b-r01",
+  "selected_score": 303.6348783439981,
+  "reason": "rmse 303.634878 -> 421.899882；未达 0.2% 门槛，保留父产物，避免把一次退步带进隐藏测试。",
+  "hypothesis": "第 10 轮：父模型验证 rmse=303.634878。本轮以 epochs=2、lr=0.005、batch=128 续训，预期误差下降且超过 0.2% 门槛。模型判断：回归误差仍在下降，保持中等步长",
+  "call_ids": [
+   "call-10-10"
+  ],
+  "epochs": 2,
+  "lr": 0.005,
+  "seconds": 5.3
+ }
+]
